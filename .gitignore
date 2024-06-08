@@ -63,50 +63,9 @@ databases/
 # Include Docker Compose volumes
 docker-compose.override.yml
 
-# Exclude Docker Compose files
-*.yml
-
-# If using RIA Services, the generated files are not really generated
-# so if you accidentally check them in, it can break things
-Generated_Code/
-
-# Exclude Node.js build artifacts and directories.
-node_modules/
-npm-debug.log
-yarn-error.log
-
-# Client-side libraries
-libman.json
-lib/
-
-# Exclude the build directory
-build/
-
-# Windows image file caches
-Thumbs.db
-ehthumbs.db
-
-# Folder config file
-Desktop.ini
-
-# Recycle Bin used on file shares
-$RECYCLE.BIN/
-
-# Microsoft Azure Web App publish settings. Comment if the file is checked in to source control.
-#*.PublishSettings
-
-# Publish output
-publish/
-out/
-
-# Include the databases folder if you have one.
-databases/
-
-# Include Docker Compose volumes
-docker-compose.override.yml
-
-# Exclude Docker Compose files
-*.yml
+# Exclude other Docker Compose files
+# But ensure the main docker-compose.yml is included
+!docker-compose.yml
 
 # If using RIA Services, the generated files are not really generated
 # so if you accidentally check them in, it can break things
@@ -135,3 +94,10 @@ build/
 *.mdf
 *.ldf
 *.ndf
+
+# Ignore Docker intermediate files and data
+.docker/
+docker/data/
+
+# Ignore temporary files
+*~
