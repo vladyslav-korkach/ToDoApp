@@ -1,6 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using TodoApp.Models;
 using TodoApp.Services;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.Extensions.Configuration;
 
 namespace TodoApp.Controllers
 {
@@ -9,30 +14,81 @@ namespace TodoApp.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IUserService _userService;
+        private readonly IConfiguration _configuration;
 
-        public AuthController(IUserService userService)
+        public AuthController(IUserService userService, IConfiguration configuration)
         {
             _userService = userService;
+            _configuration = configuration;
         }
 
         [HttpPost("signin")]
-        public async Task<IActionResult> SignIn([FromBody] User user)
+        public async Task<IActionResult> SignIn([FromBody] UserDto userDto)
         {
-            var authenticatedUser = await _userService.Authenticate(user.Username, user.PasswordHash);
+            var authenticatedUser = await _userService.Authenticate(userDto.Username, userDto.Password);
             if (authenticatedUser == null)
+            {
+                Console.WriteLine("Username or password is incorrect.");
                 return BadRequest(new { message = "Username or password is incorrect" });
+            }
 
-            return Ok(authenticatedUser);
+            // Generate JWT token
+            var token = GenerateJwtToken(authenticatedUser);
+
+            return Ok(new { Token = token });
+        }
+
+        private string GenerateJwtToken(User user)
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var jwtKey = _configuration["Jwt:Key"];
+            if (string.IsNullOrEmpty(jwtKey))
+            {
+                throw new ArgumentNullException(nameof(jwtKey), "JWT key must be configured and cannot be null or empty.");
+            }
+            var key = Encoding.ASCII.GetBytes(jwtKey);
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(new[]
+                {
+                    new Claim(ClaimTypes.Name, user.Username),
+                    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
+                }),
+                Expires = DateTime.UtcNow.AddDays(7),
+                Issuer = _configuration["Jwt:Issuer"],
+                Audience = _configuration["Jwt:Audience"],
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            return tokenHandler.WriteToken(token);
         }
 
         [HttpPost("signup")]
-        public async Task<IActionResult> SignUp([FromBody] User user)
+        public async Task<IActionResult> SignUp([FromBody] UserDto userDto)
         {
-            var registeredUser = await _userService.Register(user, user.PasswordHash);
+            if (string.IsNullOrWhiteSpace(userDto.Password))
+            {
+                return BadRequest(new { message = "Password is required" });
+            }
+
+            var user = new User
+            {
+                Username = userDto.Username
+            };
+
+            var registeredUser = await _userService.Register(user, userDto.Password);
             if (registeredUser == null)
                 return BadRequest(new { message = "User could not be registered" });
 
             return Ok(registeredUser);
         }
+    }
+
+    public class UserDto
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
     }
 }

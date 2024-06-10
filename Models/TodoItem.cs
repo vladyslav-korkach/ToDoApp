@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TodoApp.Models
 {
@@ -8,12 +7,12 @@ namespace TodoApp.Models
         public int Id { get; set; }
 
         [Required]
-        public required string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
 
         public bool IsComplete { get; set; }
 
-        [ForeignKey("User")]
-        public int UserId { get; set; }
-        public required User User { get; set; }
+        public int UserId { get; set; }  // Foreign key
+
+        public User? User { get; set; }   // Make nullable
     }
 }

@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
 using TodoApp.Data;
 using TodoApp.Models;
 
@@ -22,7 +25,15 @@ namespace TodoApp.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<TodoItem>>> GetTodoItems()
         {
-            return await _context.TodoItems.ToListAsync();
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            return await _context.TodoItems
+                                 .Where(todo => todo.UserId == int.Parse(userId))
+                                 .ToListAsync();
         }
 
         // GET: api/TodoItems/5
@@ -30,7 +41,15 @@ namespace TodoApp.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<TodoItem>> GetTodoItem(int id)
         {
-                        var todoItem = await _context.TodoItems.FindAsync(id);
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            var todoItem = await _context.TodoItems
+                                         .Where(todo => todo.UserId == int.Parse(userId) && todo.Id == id)
+                                         .FirstOrDefaultAsync();
 
             if (todoItem == null)
             {
@@ -45,7 +64,13 @@ namespace TodoApp.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutTodoItem(int id, TodoItem todoItem)
         {
-            if (id != todoItem.Id)
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            if (id != todoItem.Id || todoItem.UserId != int.Parse(userId))
             {
                 return BadRequest();
             }
@@ -76,6 +101,14 @@ namespace TodoApp.Controllers
         [HttpPost]
         public async Task<ActionResult<TodoItem>> PostTodoItem(TodoItem todoItem)
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            todoItem.UserId = int.Parse(userId);
+
             _context.TodoItems.Add(todoItem);
             await _context.SaveChangesAsync();
 
@@ -87,7 +120,16 @@ namespace TodoApp.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTodoItem(int id)
         {
-            var todoItem = await _context.TodoItems.FindAsync(id);
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            var todoItem = await _context.TodoItems
+                                         .Where(todo => todo.UserId == int.Parse(userId) && todo.Id == id)
+                                         .FirstOrDefaultAsync();
+
             if (todoItem == null)
             {
                 return NotFound();

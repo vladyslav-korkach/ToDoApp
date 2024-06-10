@@ -1,9 +1,16 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System;
 using System.Text;
 using TodoApp.Data;
 using TodoApp.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,9 +25,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
                          errorNumbersToAdd: null)));
 
 var jwtKey = builder.Configuration["Jwt:Key"];
-if (jwtKey == null)
+if (string.IsNullOrEmpty(jwtKey))
 {
-    throw new ArgumentNullException(nameof(jwtKey), "JWT key is not configured");
+    throw new ArgumentNullException(nameof(jwtKey), "JWT key is not configured.");
 }
 var key = Encoding.ASCII.GetBytes(jwtKey);
 
@@ -46,6 +53,33 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddScoped<IUserService, UserService>();
 
+// Register the Swagger generator, defining 1 or more Swagger documents
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Todo API", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        In = ParameterLocation.Header,
+        Description = "Please insert JWT with Bearer into field",
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement {
+    {
+        new OpenApiSecurityScheme
+        {
+            Reference = new OpenApiReference
+            {
+                Type = ReferenceType.SecurityScheme,
+                Id = "Bearer"
+            }
+        },
+        new string[] { }
+    }
+    });
+});
+
 var app = builder.Build();
 
 // Apply migrations and seed the database
@@ -70,7 +104,10 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Todo API V1");
+    });
 }
 
 app.UseHttpsRedirection();
@@ -79,5 +116,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Configure to listen on all network interfaces on port 80
+app.Urls.Add("http://0.0.0.0:80");
 
 app.Run();

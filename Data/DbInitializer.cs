@@ -1,8 +1,9 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
+using TodoApp.Models;
+using TodoApp.Services;
 using System;
 using System.Linq;
-using TodoApp.Models;
 
 namespace TodoApp.Data
 {
@@ -10,55 +11,48 @@ namespace TodoApp.Data
     {
         public static void Initialize(IServiceProvider serviceProvider)
         {
-            using (var context = new ApplicationDbContext(
-                serviceProvider.GetRequiredService<DbContextOptions<ApplicationDbContext>>()))
+            using var context = new ApplicationDbContext(
+                serviceProvider.GetRequiredService<DbContextOptions<ApplicationDbContext>>());
+
+            if (context.Users.Any())
             {
-                // Look for any users.
-                if (context.Users.Any())
-                {
-                    return;   // DB has been seeded
-                }
+                return;   // DB has been seeded
+            }
 
-                var users = new User[10];
-                for (int i = 0; i < 10; i++)
+            var userService = serviceProvider.GetRequiredService<IUserService>();
+
+            for (int i = 1; i <= 10; i++)
+            {
+                var user = new User
                 {
-                    var user = new User
+                    Username = $"User{i}"
+                    // Add any additional fields here if necessary
+                };
+
+                userService.Register(user, "Password123").Wait();
+
+                // Retrieve the registered user to ensure the User object is correctly populated
+                var registeredUser = context.Users.SingleOrDefault(u => u.Username == user.Username);
+
+                if (registeredUser != null)
+                {
+                    // Create 10 TodoItems for each user
+                    for (int j = 1; j <= 10; j++)
                     {
-                        Username = $"user{i + 1}",
-                        PasswordHash = CreatePasswordHash("password")
-                    };
-                    users[i] = user;
-                    context.Users.Add(user);
-                }
-
-                context.SaveChanges();
-
-                foreach (var user in users)
-                {
-                    for (int j = 0; j < 10; j++)
-                    {
-                        context.TodoItems.Add(new TodoItem
+                        var todoItem = new TodoItem
                         {
-                            Description = $"Todo {j + 1} for {user.Username}",
+                            Description = $"Todo item {j} for {registeredUser.Username}",
                             IsComplete = false,
-                            UserId = user.Id,
-                            User = user  // Ensure the User property is set
-                        });
+                            UserId = registeredUser.Id,  // Assuming UserId is the foreign key in TodoItem
+                            User = registeredUser
+                        };
+
+                        context.TodoItems.Add(todoItem);
                     }
                 }
-
-                context.SaveChanges();
             }
-        }
 
-        private static string CreatePasswordHash(string password)
-        {
-            using (var hmac = new System.Security.Cryptography.HMACSHA512())
-            {
-                var passwordBytes = System.Text.Encoding.UTF8.GetBytes(password);
-                var hashBytes = hmac.ComputeHash(passwordBytes);
-                return Convert.ToBase64String(hashBytes);
-            }
+            context.SaveChanges();
         }
     }
 }

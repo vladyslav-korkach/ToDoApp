@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using TodoApp.Models;
 using TodoApp.Data;
 
@@ -14,49 +16,64 @@ namespace TodoApp.Services
             this.context = context ?? throw new ArgumentNullException(nameof(context));
         }
 
-        public User? Authenticate(string username, string password)
+        public async Task<User?> Authenticate(string username, string password)
         {
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
             {
                 return null;
             }
 
-            var user = context.Users.SingleOrDefault(x => x.Username == username);
-
-            if (user == null || !VerifyPasswordHash(password, user.PasswordHash))
+            var user = await context.Users.SingleOrDefaultAsync(x => x.Username == username);
+            if (user == null)
             {
+                Console.WriteLine($"User not found for username: {username}");
                 return null;
             }
+
+            if (!VerifyPasswordHash(password, user.PasswordHash, user.PasswordSalt))
+            {
+                Console.WriteLine($"Password verification failed for username: {username}");
+                return null;
+            }
+
+            Console.WriteLine("User authenticated successfully.");
+            return user;
+        }
+
+        public async Task<User> Register(User user, string password)
+        {
+            if (string.IsNullOrWhiteSpace(password))
+                throw new ArgumentException("Password is required");
+
+            if (context.Users.Any(x => x.Username == user.Username))
+                throw new ArgumentException($"Username \"{user.Username}\" is already taken");
+
+            CreatePasswordHash(password, out byte[] passwordHash, out byte[] passwordSalt);
+
+            user.PasswordHash = passwordHash;
+            user.PasswordSalt = passwordSalt;
+
+            context.Users.Add(user);
+            await context.SaveChangesAsync();
 
             return user;
         }
 
-        public Task<User> Register(User user, string password)
+        private void CreatePasswordHash(string password, out byte[] passwordHash, out byte[] passwordSalt)
         {
-            throw new NotImplementedException();
-        }
-
-        Task<User> IUserService.Authenticate(string username, string password)
-        {
-            throw new NotImplementedException();
-        }
-
-        private bool VerifyPasswordHash(string password, string storedHash)
-        {
-            if (string.IsNullOrEmpty(password))
-            {
-                throw new ArgumentNullException(nameof(password), "Password cannot be null or empty");
-            }
-
-            if (string.IsNullOrEmpty(storedHash))
-            {
-                throw new ArgumentNullException(nameof(storedHash), "Stored hash cannot be null or empty");
-            }
-
             using (var hmac = new System.Security.Cryptography.HMACSHA512())
             {
-                var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
-                return storedHash == Convert.ToBase64String(hash);
+                passwordSalt = hmac.Key;
+                passwordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+            }
+        }
+
+        private bool VerifyPasswordHash(string password, byte[] storedHash, byte[] storedSalt)
+        {
+            using (var hmac = new System.Security.Cryptography.HMACSHA512(storedSalt))
+            {
+                var computedHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+                return storedHash.SequenceEqual(computedHash);
             }
         }
     }

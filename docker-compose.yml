@@ -7,9 +7,9 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Server=todoapp-mysql;Database=TodoAppDb;User=root;Password=password;
-      - Jwt__Key=your_secret_key
-      - Jwt__Issuer=your_issuer
-      - Jwt__Audience=your_audience
+      - Jwt__Key=your-very-secure-secret-key-that-is-long-enough
+      - Jwt__Issuer=your-issuer
+      - Jwt__Audience=your-audience
     depends_on:
       - mysql
     volumes:

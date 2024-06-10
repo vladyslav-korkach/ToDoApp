@@ -7,9 +7,15 @@ namespace TodoApp.Models
         public int Id { get; set; }
 
         [Required]
-        public required string Username { get; set; }
+        public string Username { get; set; } = string.Empty;
 
         [Required]
-        public required string PasswordHash { get; set; }
+        public byte[] PasswordHash { get; set; } = Array.Empty<byte>();
+
+        [Required]
+        public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
+
+        // Add any new fields here
+        // Example: public string Email { get; set; } = string.Empty;
     }
 }

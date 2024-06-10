@@ -11,7 +11,7 @@ using TodoApp.Data;
 namespace TodoApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20240608101648_InitialCreate")]
+    [Migration("20240609171339_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -57,9 +57,13 @@ namespace TodoApp.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("PasswordHash")
+                    b.Property<byte[]>("PasswordHash")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .HasColumnType("longblob");
+
+                    b.Property<byte[]>("PasswordSalt")
+                        .IsRequired()
+                        .HasColumnType("longblob");
 
                     b.Property<string>("Username")
                         .IsRequired()
