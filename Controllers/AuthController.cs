@@ -1,11 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
-using TodoApp.Models;
-using TodoApp.Services;
-using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.Extensions.Configuration;
+using TodoApp.Models;
+using TodoApp.Services;
 
 namespace TodoApp.Controllers
 {
@@ -27,15 +26,30 @@ namespace TodoApp.Controllers
         {
             var authenticatedUser = await _userService.Authenticate(userDto.Username, userDto.Password);
             if (authenticatedUser == null)
-            {
-                Console.WriteLine("Username or password is incorrect.");
                 return BadRequest(new { message = "Username or password is incorrect" });
+
+            var token = GenerateJwtToken(authenticatedUser);
+            return Ok(new { token });
+        }
+
+        [HttpPost("signup")]
+        public async Task<IActionResult> SignUp([FromBody] UserDto userDto)
+        {
+            if (string.IsNullOrWhiteSpace(userDto.Password))
+            {
+                return BadRequest(new { message = "Password is required" });
             }
 
-            // Generate JWT token
-            var token = GenerateJwtToken(authenticatedUser);
+            var user = new User
+            {
+                Username = userDto.Username
+            };
 
-            return Ok(new { Token = token });
+            var registeredUser = await _userService.Register(user, userDto.Password);
+            if (registeredUser == null)
+                return BadRequest(new { message = "User could not be registered" });
+
+            return Ok(registeredUser);
         }
 
         private string GenerateJwtToken(User user)
@@ -63,26 +77,6 @@ namespace TodoApp.Controllers
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
-        }
-
-        [HttpPost("signup")]
-        public async Task<IActionResult> SignUp([FromBody] UserDto userDto)
-        {
-            if (string.IsNullOrWhiteSpace(userDto.Password))
-            {
-                return BadRequest(new { message = "Password is required" });
-            }
-
-            var user = new User
-            {
-                Username = userDto.Username
-            };
-
-            var registeredUser = await _userService.Register(user, userDto.Password);
-            if (registeredUser == null)
-                return BadRequest(new { message = "User could not be registered" });
-
-            return Ok(registeredUser);
         }
     }
 

@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TodoApp.Data;
+using TodoApp.Models;
+using TodoApp.Services;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using TodoApp.Data;
-using TodoApp.Models;
 
 namespace TodoApp.Controllers
 {
@@ -14,26 +15,35 @@ namespace TodoApp.Controllers
     public class TodoItemsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly IUserService _userService;
 
-        public TodoItemsController(ApplicationDbContext context)
+        public TodoItemsController(ApplicationDbContext context, IUserService userService)
         {
             _context = context;
+            _userService = userService;
         }
 
         // GET: api/TodoItems
         [Authorize]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<TodoItem>>> GetTodoItems()
+        public async Task<ActionResult<IEnumerable<TodoItemDto>>> GetTodoItems()
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userId == null)
-            {
-                return Unauthorized();
-            }
+            var todoItems = await _context.TodoItems
+                .Include(t => t.User)
+                .ToListAsync();
 
-            return await _context.TodoItems
-                                 .Where(todo => todo.UserId == int.Parse(userId))
-                                 .ToListAsync();
+            var todoItemsDto = todoItems.Select(t => new TodoItemDto
+            {
+                Id = t.Id,
+                Description = t.Description,
+                IsCompleted = t.IsCompleted,
+                CreatedAt = t.CreatedAt,
+                CompletedAt = t.CompletedAt,
+                UserId = t.User.Id,
+                Username = t.User.Username
+            }).ToList();
+
+            return Ok(todoItemsDto);
         }
 
         // GET: api/TodoItems/5
@@ -41,39 +51,53 @@ namespace TodoApp.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<TodoItem>> GetTodoItem(int id)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userId == null)
+            var user = await GetUser();
+            if (user == null)
             {
-                return Unauthorized();
+                return NotFound("User not found.");
             }
-
-            var todoItem = await _context.TodoItems
-                                         .Where(todo => todo.UserId == int.Parse(userId) && todo.Id == id)
-                                         .FirstOrDefaultAsync();
+            
+            var todoItem = await _context.TodoItems.FindAsync(id);
 
             if (todoItem == null)
             {
                 return NotFound();
             }
 
-            return todoItem;
+            if (await _userService.IsAdmin(user.Id) || todoItem.User.Id == user.Id)
+            {
+                return todoItem;
+            }
+
+            return Forbid();
         }
 
         // PUT: api/TodoItems/5
         [Authorize]
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutTodoItem(int id, TodoItem todoItem)
+        public async Task<IActionResult> PutTodoItem(int id, TodoItemDto todoItemDto)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userId == null)
+            var user = await GetUser();
+            if (user == null)
             {
-                return Unauthorized();
+                return NotFound("User not found.");
             }
 
-            if (id != todoItem.Id || todoItem.UserId != int.Parse(userId))
+            var todoItem = await _context.TodoItems.Include(t => t.User).FirstOrDefaultAsync(t => t.Id == id);
+            if (todoItem == null)
             {
-                return BadRequest();
+                return NotFound("Todo item not found.");
             }
+
+            if (!await _userService.IsAdmin(user.Id) && todoItem.User.Id != user.Id)
+            {
+                return Forbid();
+            }
+
+            // Update the properties of the todoItem with the values from todoItemDto
+            todoItem.Description = todoItemDto.Description;
+            todoItem.IsCompleted = false;
+            // Update other properties as needed
 
             _context.Entry(todoItem).State = EntityState.Modified;
 
@@ -93,21 +117,26 @@ namespace TodoApp.Controllers
                 }
             }
 
-            return NoContent();
+            return CreatedAtAction("GetTodoItem", new { id = todoItem.Id }, todoItem);
         }
 
         // POST: api/TodoItems
         [Authorize]
         [HttpPost]
-        public async Task<ActionResult<TodoItem>> PostTodoItem(TodoItem todoItem)
+        public async Task<ActionResult<TodoItem>> PostTodoItem(CreateTodoItemDto createTodoItemDto)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userId == null)
+            var user = await GetUser();
+            if (user == null)
             {
-                return Unauthorized();
+                return NotFound("User not found.");
             }
 
-            todoItem.UserId = int.Parse(userId);
+            var todoItem = new TodoItem
+            {
+                Description = createTodoItemDto.Description,
+                CreatedAt = DateTime.UtcNow,                
+                User = user
+            };
 
             _context.TodoItems.Add(todoItem);
             await _context.SaveChangesAsync();
@@ -120,19 +149,21 @@ namespace TodoApp.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTodoItem(int id)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userId == null)
+            var user = await GetUser();
+            if (user == null)
             {
-                return Unauthorized();
+                return NotFound("User not found.");
             }
 
-            var todoItem = await _context.TodoItems
-                                         .Where(todo => todo.UserId == int.Parse(userId) && todo.Id == id)
-                                         .FirstOrDefaultAsync();
-
+            var todoItem = await _context.TodoItems.FindAsync(id);
             if (todoItem == null)
             {
                 return NotFound();
+            }
+
+            if (!await _userService.IsAdmin(user.Id) && todoItem.User.Id != user.Id)
+            {
+                return Forbid();
             }
 
             _context.TodoItems.Remove(todoItem);
@@ -145,5 +176,37 @@ namespace TodoApp.Controllers
         {
             return _context.TodoItems.Any(e => e.Id == id);
         }
+        
+
+        private async Task<User?> GetUser ()
+        //Cannot implicitly convert type 'System.Threading.Tasks.Task<TodoApp.Models.User?>' to 'TodoApp.Models.User'
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null)
+            {
+                return null;
+            }
+
+            var userId = int.Parse(userIdClaim.Value);
+            var user = await _userService.GetById(userId);
+            return user;
+        }
+    }
+
+    public class CreateTodoItemDto
+    {
+        public string Description { get; set; } = string.Empty;
+    }
+
+
+    public class TodoItemDto
+    {
+        public int Id { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public bool IsCompleted { get; set; } 
+        public DateTime CreatedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public int UserId { get; set; }
+        public string Username { get; set; } = string.Empty;
     }
 }

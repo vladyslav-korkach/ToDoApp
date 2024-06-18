@@ -1,9 +1,9 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.EntityFrameworkCore;
-using TodoApp.Models;
-using TodoApp.Services;
 using System;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TodoApp.Models;
+using TodoApp.Services;
 
 namespace TodoApp.Data
 {
@@ -11,48 +11,72 @@ namespace TodoApp.Data
     {
         public static void Initialize(IServiceProvider serviceProvider)
         {
-            using var context = new ApplicationDbContext(
-                serviceProvider.GetRequiredService<DbContextOptions<ApplicationDbContext>>());
-
-            if (context.Users.Any())
+            using (var context = new ApplicationDbContext(
+                serviceProvider.GetRequiredService<DbContextOptions<ApplicationDbContext>>()))
             {
-                return;   // DB has been seeded
-            }
-
-            var userService = serviceProvider.GetRequiredService<IUserService>();
-
-            for (int i = 1; i <= 10; i++)
-            {
-                var user = new User
+                if (context.Users.Any())
                 {
-                    Username = $"User{i}"
-                    // Add any additional fields here if necessary
+                    return;   // DB has been seeded
+                }
+
+                // Add roles
+                var roles = new[]
+                {
+                    new Role { Name = "Admin" },
+                    new Role { Name = "User" }
                 };
 
-                userService.Register(user, "Password123").Wait();
+                context.Roles.AddRange(roles);
+                context.SaveChanges();
 
-                // Retrieve the registered user to ensure the User object is correctly populated
-                var registeredUser = context.Users.SingleOrDefault(u => u.Username == user.Username);
-
-                if (registeredUser != null)
+                // Add users
+                var userService = serviceProvider.GetRequiredService<IUserService>();
+                var users = new[]
                 {
-                    // Create 10 TodoItems for each user
-                    for (int j = 1; j <= 10; j++)
-                    {
-                        var todoItem = new TodoItem
-                        {
-                            Description = $"Todo item {j} for {registeredUser.Username}",
-                            IsComplete = false,
-                            UserId = registeredUser.Id,  // Assuming UserId is the foreign key in TodoItem
-                            User = registeredUser
-                        };
+                    new User { Username = "admin" },
+                    new User { Username = "user1" },
+                    new User { Username = "user2" },
+                    new User { Username = "user3" },
+                    new User { Username = "user4" },
+                    new User { Username = "user5" },
+                    new User { Username = "user6" },
+                    new User { Username = "user7" },
+                    new User { Username = "user8" },
+                    new User { Username = "user9" }
+                };
 
-                        context.TodoItems.Add(todoItem);
+                foreach (var user in users)
+                {
+                    userService.Register(user, "password").Wait();
+                }
+
+                // Assign roles
+                var adminUser = context.Users.SingleOrDefault(u => u.Username == "admin");
+                if (adminUser != null)
+                {
+                    userService.AssignRole(adminUser.Id, "Admin").Wait();
+                }
+
+                for (int i = 1; i < users.Length; i++)
+                {
+                    var user = context.Users.SingleOrDefault(u => u.Username == "user" + i);
+                    if (user != null)
+                    {
+                        userService.AssignRole(user.Id, "User").Wait();
                     }
                 }
-            }
 
-            context.SaveChanges();
+                // Add TodoItems
+                foreach (var user in context.Users.Include(u => u.TodoItems).ToList())
+                {
+                    for (int i = 1; i <= 10; i++)
+                    {
+                        user.TodoItems.Add(new TodoItem { Description = $"Todo {i} for {user.Username}", User = user });
+                    }
+                }
+
+                context.SaveChanges();
+            }
         }
     }
 }

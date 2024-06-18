@@ -1,11 +1,19 @@
+version: '3.4'
+
 services:
   todoapp:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev # Change to Dockerfile.prod for production
     container_name: todoapp
     ports:
-      - "8081:80"
+      - "8081:80" # Exposing the application port
+      - "5005:5005" # Exposing the debugger port
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_ENVIRONMENT=Development    
+      - ASPNETCORE_URLS=http://+:80
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+      - ASPNETCORE_LOGGING__CONSOLE__DISABLECOLORS=true
       - ConnectionStrings__DefaultConnection=Server=todoapp-mysql;Database=TodoAppDb;User=root;Password=password;
       - Jwt__Key=your-very-secure-secret-key-that-is-long-enough
       - Jwt__Issuer=your-issuer
@@ -13,7 +21,8 @@ services:
     depends_on:
       - mysql
     volumes:
-      - todoapp-data:/app/data
+      - .:/app:rw # Bind mount the current directory to /app inside the container
+      - ~/.vsdbg:/remote_debugger:rw
 
   mysql:
     image: mysql:8.0
@@ -22,6 +31,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: TodoAppDb
+    volumes:
+      - todoapp-mysql-data:/var/lib/mysql
     ports:
       - "3306:3306"
     healthcheck:

@@ -1,21 +1,20 @@
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using System;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using TodoApp.Data;
 using TodoApp.Services;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
+    });
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(builder.Configuration.GetConnectionString("DefaultConnection"), 
                      new MySqlServerVersion(new Version(8, 0, 25)),
@@ -25,11 +24,11 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
                          errorNumbersToAdd: null)));
 
 var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrEmpty(jwtKey))
+if (string.IsNullOrEmpty(jwtKey) && builder.Environment.IsProduction())
 {
     throw new ArgumentNullException(nameof(jwtKey), "JWT key is not configured.");
 }
-var key = Encoding.ASCII.GetBytes(jwtKey);
+var key = string.IsNullOrEmpty(jwtKey) ? new byte[16] : Encoding.ASCII.GetBytes(jwtKey); // Default to 16 bytes if not set
 
 builder.Services.AddAuthentication(options =>
 {
@@ -119,5 +118,6 @@ app.MapControllers();
 
 // Configure to listen on all network interfaces on port 80
 app.Urls.Add("http://0.0.0.0:80");
+app.Urls.Add("http://0.0.0.0:5005");
 
 app.Run();
